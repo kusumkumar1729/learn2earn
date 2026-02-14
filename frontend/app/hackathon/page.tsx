@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
 import Icon from '@/components/ui/AppIcon';
 import DynamicNavbar from '@/components/navigation/DynamicNavbar';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
@@ -20,6 +22,7 @@ interface Hackathon {
     prizes: string[];
     tags: string[];
     image: string;
+    externalUrl?: string; // Added field
     status: 'upcoming' | 'ongoing' | 'ended';
 }
 
@@ -32,6 +35,17 @@ const HackathonContent = () => {
     const [participatedHackathons, setParticipatedHackathons] = useState<number[]>([]);
     const [isLoading, setIsLoading] = useState<number | null>(null);
     const [showConfetti, setShowConfetti] = useState(false);
+
+    // Mock State
+    const isConnected = true;
+
+    // We will use the static 'hackathons' array below as the source of truth
+    const finalHackathons: Hackathon[] = []; // Initialized empty, will be populated below or just defined there.
+
+    // Move hackathons definition UP or just merge logic.
+    // Ideally we define hackathons array first.
+    // Let's just remove the blockchain fetching logic here and use the static list defined below.
+
 
     useEffect(() => {
         setIsHydrated(true);
@@ -130,12 +144,38 @@ const HackathonContent = () => {
         },
     ];
 
-    const handleParticipate = (hackathon: Hackathon) => {
-        if (participatedHackathons.includes(hackathon.id)) {
+    const effectiveHackathons = hackathons; // Use the static list
+
+    const isRegistered = (hackathonId: number) => {
+        // Check local state 
+        return participatedHackathons.includes(hackathonId);
+    };
+
+    const handleParticipate = async (hackathon: Hackathon) => {
+        if (isRegistered(hackathon.id)) {
             showToastMessage('You have already registered for this hackathon!', 'error');
             return;
         }
 
+        // Mock Registration
+        if (isConnected) {
+            setIsLoading(hackathon.id);
+            try {
+                // Mock delay
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                showToastMessage(`Registration submitted for ${hackathon.title}!`, 'success');
+                setParticipatedHackathons(prev => [...prev, hackathon.id]);
+                setShowConfetti(true);
+            } catch (error) {
+                console.error('Registration failed:', error);
+                showToastMessage('Registration failed: ' + (error as any).message, 'error');
+            }
+            setIsLoading(null);
+            return;
+        }
+
+        // Fallback Logic
         const tokenBalance = userProfile?.tokens || 0;
         if (tokenBalance < hackathon.tokenCost) {
             showToastMessage(`Insufficient tokens! You need ${hackathon.tokenCost} tokens.`, 'error');
@@ -239,7 +279,7 @@ const HackathonContent = () => {
                                 <Icon name="TrophyIcon" size={20} className="text-primary" />
                             </div>
                             <div>
-                                <p className="font-mono text-xl font-bold text-foreground">{hackathons.filter(h => h.status === 'upcoming').length}</p>
+                                <p className="font-mono text-xl font-bold text-foreground">{effectiveHackathons.filter(h => h.status === 'upcoming').length}</p>
                                 <p className="font-caption text-xs text-muted-foreground">Upcoming</p>
                             </div>
                         </div>
@@ -261,7 +301,7 @@ const HackathonContent = () => {
                                 <Icon name="UserGroupIcon" size={20} className="text-secondary" />
                             </div>
                             <div>
-                                <p className="font-mono text-xl font-bold text-foreground">{hackathons.reduce((acc, h) => acc + h.participants, 0)}</p>
+                                <p className="font-mono text-xl font-bold text-foreground">{effectiveHackathons.reduce((acc, h) => acc + h.participants, 0)}</p>
                                 <p className="font-caption text-xs text-muted-foreground">Total Participants</p>
                             </div>
                         </div>
@@ -272,7 +312,7 @@ const HackathonContent = () => {
                                 <Icon name="SparklesIcon" size={20} className="text-warning" />
                             </div>
                             <div>
-                                <p className="font-mono text-xl font-bold text-foreground">19,500</p>
+                                <p className="font-mono text-xl font-bold text-foreground">{effectiveHackathons.length > 0 ? "Dynamic Pool" : "0"}</p>
                                 <p className="font-caption text-xs text-muted-foreground">Total Prize Pool</p>
                             </div>
                         </div>
@@ -281,16 +321,22 @@ const HackathonContent = () => {
 
                 {/* Hackathon Grid */}
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {hackathons.map((hackathon) => (
+                    {effectiveHackathons.length === 0 && (
+                        <div className="col-span-full py-12 text-center text-muted-foreground">
+                            No active hackathons found.
+                        </div>
+                    )}
+                    {effectiveHackathons.map((hackathon) => (
                         <div
                             key={hackathon.id}
                             className="group overflow-hidden rounded-xl bg-card border border-border transition-smooth hover:border-primary/50 hover:shadow-glow-sm"
                         >
                             {/* Image */}
                             <div className="relative h-40 overflow-hidden">
-                                <img
+                                <Image
                                     src={hackathon.image}
                                     alt={hackathon.title}
+                                    fill
                                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent" />
@@ -343,35 +389,55 @@ const HackathonContent = () => {
                                     <div className="flex items-center gap-1">
                                         <Icon name="CurrencyDollarIcon" size={18} className="text-primary" />
                                         <span className="font-mono text-lg font-bold text-primary">{hackathon.tokenCost}</span>
-                                        <span className="font-caption text-xs text-muted-foreground">tokens</span>
+                                        <span className="font-caption text-xs text-muted-foreground">EDU</span>
                                     </div>
-                                    <button
-                                        onClick={() => handleParticipate(hackathon)}
-                                        disabled={hackathon.status === 'ended' || participatedHackathons.includes(hackathon.id) || isLoading === hackathon.id}
-                                        className={`flex items-center gap-2 rounded-lg px-4 py-2 font-caption text-sm font-medium transition-smooth focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed ${participatedHackathons.includes(hackathon.id)
-                                            ? 'bg-success text-success-foreground'
-                                            : 'bg-primary text-primary-foreground hover:scale-[0.98]'
-                                            }`}
-                                    >
-                                        {isLoading === hackathon.id ? (
-                                            <>
-                                                <Icon name="ArrowPathIcon" size={16} className="animate-spin" />
-                                                <span>Processing...</span>
-                                            </>
-                                        ) : participatedHackathons.includes(hackathon.id) ? (
-                                            <>
-                                                <Icon name="CheckIcon" size={16} />
-                                                <span>Registered</span>
-                                            </>
-                                        ) : hackathon.status === 'ended' ? (
-                                            <span>Ended</span>
-                                        ) : (
-                                            <>
-                                                <Icon name="RocketLaunchIcon" size={16} />
-                                                <span>Participate</span>
-                                            </>
+                                    <div className="flex items-center gap-2">
+                                        <Link
+                                            href={`/hackathon/${hackathon.id}`}
+                                            className="flex items-center gap-1 rounded-lg border border-border px-3 py-2 font-caption text-xs font-medium text-muted-foreground transition-smooth hover:border-primary hover:text-foreground"
+                                        >
+                                            <Icon name="EyeIcon" size={14} />
+                                            <span>Details</span>
+                                        </Link>
+                                        {hackathon.externalUrl && (
+                                            <a
+                                                href={hackathon.externalUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-1 rounded-lg border border-border px-3 py-2 font-caption text-xs font-medium text-muted-foreground transition-smooth hover:border-primary hover:text-foreground"
+                                                title="Visit Website"
+                                            >
+                                                <Icon name="ArrowTopRightOnSquareIcon" size={14} />
+                                            </a>
                                         )}
-                                    </button>
+                                        <button
+                                            onClick={() => handleParticipate(hackathon)}
+                                            disabled={hackathon.status === 'ended' || isRegistered(hackathon.id) || isLoading === hackathon.id}
+                                            className={`flex items-center gap-2 rounded-lg px-4 py-2 font-caption text-sm font-medium transition-smooth focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed ${isRegistered(hackathon.id)
+                                                ? 'bg-success text-success-foreground'
+                                                : 'bg-primary text-primary-foreground hover:scale-[0.98]'
+                                                }`}
+                                        >
+                                            {isLoading === hackathon.id ? (
+                                                <>
+                                                    <Icon name="ArrowPathIcon" size={16} className="animate-spin" />
+                                                    <span>Processing...</span>
+                                                </>
+                                            ) : isRegistered(hackathon.id) ? (
+                                                <>
+                                                    <Icon name="CheckIcon" size={16} />
+                                                    <span>Registered</span>
+                                                </>
+                                            ) : hackathon.status === 'ended' ? (
+                                                <span>Ended</span>
+                                            ) : (
+                                                <>
+                                                    <Icon name="RocketLaunchIcon" size={16} />
+                                                    <span>Participate</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

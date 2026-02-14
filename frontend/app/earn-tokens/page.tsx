@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import Icon from '@/components/ui/AppIcon';
 import DynamicNavbar from '@/components/navigation/DynamicNavbar';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
 import Confetti from '@/components/ui/Confetti';
+import { getActivityStatus, redeemActivity, getStudentSubmissions, type SubmissionStatus } from '@/lib/activitySubmissionsStore';
 
 interface TokenActivity {
     id: number;
@@ -36,16 +38,25 @@ interface RedeemableItem {
 }
 
 const EarnTokensContent = () => {
-    const { userProfile, earnTokens, spendTokens } = useAuth();
+    const { user, userProfile, earnTokens, spendTokens } = useAuth();
     const [isHydrated, setIsHydrated] = useState(false);
     const [activeSection, setActiveSection] = useState<'earn' | 'assign' | 'use' | 'funding' | 'redeem'>('earn');
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const [toastType, setToastType] = useState<'success' | 'error'>('success');
-    const [isEarning, setIsEarning] = useState(false);
     const [showConfetti, setShowConfetti] = useState(false);
     const [redeemedItems, setRedeemedItems] = useState<number[]>([]);
     const [isRedeeming, setIsRedeeming] = useState<number | null>(null);
+    const [earnedActivities, setEarnedActivities] = useState<number[]>([]);
+    const [isEarningActivity, setIsEarningActivity] = useState<number | null>(null);
+    const [totalEarned, setTotalEarned] = useState(0);
+
+    // Mock State
+    const isConnected = true;
+
+    // Calculate display balance
+    const displayBalance = userProfile?.tokens || 1250;
+    const pendingTokens = BigInt(0);
 
     useEffect(() => {
         setIsHydrated(true);
@@ -95,27 +106,74 @@ const EarnTokensContent = () => {
         { id: 8, title: 'Branded Notebook', description: 'Premium notebook with Learn2Earn branding', tokenCost: 60, icon: 'BookOpenIcon', image: 'https://images.unsplash.com/photo-1531346878377-a5be20888e57', category: 'merchandise' },
     ];
 
-    // Simulate earning tokens (for demo purposes)
-    const handleSimulateEarn = (amount: number, activityName: string) => {
-        setIsEarning(true);
+    // Get activity status for current user
+    const getStatus = (activityId: number): SubmissionStatus => {
+        if (!user) return 'not_submitted';
+        return getActivityStatus(activityId, user.uid);
+    };
+
+    // Refresh submissions when section changes
+    const [refreshKey, setRefreshKey] = useState(0);
+    useEffect(() => {
+        // Force refresh when earn section becomes active
+        if (activeSection === 'earn') {
+            setRefreshKey(prev => prev + 1);
+        }
+    }, [activeSection]);
+
+    // Handle redeeming approved tokens
+    // Handle redeeming approved tokens
+    const handleRedeemActivity = async (activity: TokenActivity) => {
+        if (!user) return;
+
+        // Mock blockchain request for "Official" feeling
+        if (isConnected) {
+            console.log("Mocking blockchain request for", activity.title);
+            // Proceed to fallback or simulate "pending"
+        }
+
+        // Fallback to localStorage logic for demo/unconnected state
+        const status = getStatus(activity.id);
+        if (status !== 'approved') {
+            showToastMessage('This activity is not approved for redemption yet.', 'error');
+            return;
+        }
+
+        if (activity.tokens < 50) {
+            showToastMessage('Minimum redeemable amount is 50 EDU tokens.', 'error');
+            return;
+        }
+
+        setIsEarningActivity(activity.id);
+
         setTimeout(() => {
-            const success = earnTokens(amount);
-            setIsEarning(false);
-            if (success) {
-                showToastMessage(`Tokens earned successfully! +${amount} EDU for ${activityName}`, 'success');
+            const redeemSuccess = redeemActivity(activity.id, user.uid);
+            if (redeemSuccess) {
+                const earnSuccess = earnTokens(activity.tokens);
+                if (earnSuccess) {
+                    setEarnedActivities(prev => [...prev, activity.id]);
+                    setTotalEarned(prev => prev + activity.tokens);
+                    showToastMessage(`Tokens earned successfully! +${activity.tokens} EDU for ${activity.title}`, 'success');
+                    setShowConfetti(true);
+                    setRefreshKey(prev => prev + 1); // Refresh to show updated status
+                } else {
+                    showToastMessage('Failed to earn tokens. Please try again.', 'error');
+                }
             } else {
-                showToastMessage('Failed to earn tokens. Please try again.', 'error');
+                showToastMessage('Failed to redeem activity. Please try again.', 'error');
             }
-        }, 1000);
+            setIsEarningActivity(null);
+        }, 1500);
     };
 
     // Handle redeeming items
-    const handleRedeem = (item: RedeemableItem) => {
+    const handleRedeem = async (item: RedeemableItem) => {
         if (redeemedItems.includes(item.id)) {
             showToastMessage('You have already redeemed this item!', 'error');
             return;
         }
 
+        // Fallback Local Storage Logic
         const balance = userProfile?.tokens || 0;
         if (balance < item.tokenCost) {
             showToastMessage(`Insufficient tokens! You need ${item.tokenCost} tokens.`, 'error');
@@ -201,7 +259,7 @@ const EarnTokensContent = () => {
                                     </div>
                                     <div>
                                         <p className="font-caption text-sm text-muted-foreground">Your Balance</p>
-                                        <p className="font-heading text-2xl font-bold text-primary">{userProfile?.tokens || 0} EDU</p>
+                                        <p className="font-heading text-2xl font-bold text-primary">{displayBalance} EDU</p>
                                     </div>
                                 </div>
                             </div>
@@ -241,41 +299,113 @@ const EarnTokensContent = () => {
                                 Complete these activities to earn L2E tokens that you can redeem for exciting rewards
                             </p>
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {earnActivities.map((activity) => (
-                                    <div
-                                        key={activity.id}
-                                        className="group rounded-lg border border-border bg-card/50 p-4 transition-smooth hover:border-primary/50 hover:shadow-glow-sm"
-                                    >
-                                        <div className="flex items-start gap-4">
-                                            <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg ${getCategoryColor(activity.category)}`}>
-                                                <Icon name={activity.icon} size={24} />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="font-caption text-sm font-medium text-foreground">{activity.title}</h3>
-                                                <p className="mt-1 font-caption text-xs text-muted-foreground line-clamp-2">{activity.description}</p>
-                                                <div className="mt-2 flex items-center justify-between">
-                                                    <div className="flex items-center gap-1">
-                                                        <Icon name="CurrencyDollarIcon" size={14} className="text-primary" />
-                                                        <span className="font-mono text-sm font-bold text-primary">+{activity.tokens}</span>
-                                                        <span className="font-caption text-xs text-muted-foreground">tokens</span>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleSimulateEarn(activity.tokens, activity.title)}
-                                                        disabled={isEarning}
-                                                        className="flex items-center gap-1 rounded-md bg-primary/10 border border-primary/30 px-2 py-1 font-caption text-xs font-medium text-primary transition-smooth hover:bg-primary/20 disabled:opacity-50"
-                                                    >
-                                                        {isEarning ? (
-                                                            <Icon name="ArrowPathIcon" size={12} className="animate-spin" />
+                                {earnActivities.map((activity) => {
+                                    const status = getStatus(activity.id);
+                                    const isBelow50 = activity.tokens < 50;
+                                    const isProcessing = isEarningActivity === activity.id;
+                                    const isRedeemed = status === 'redeemed';
+                                    const isPending = status === 'pending';
+                                    const isApproved = status === 'approved';
+
+                                    return (
+                                        <div
+                                            key={activity.id}
+                                            className={`group rounded-lg border bg-card/50 p-4 transition-smooth ${isRedeemed ? 'border-success/30 bg-success/5' : isPending ? 'border-warning/30 bg-warning/5' : isApproved ? 'border-primary/30 bg-primary/5' : 'border-border hover:border-primary/50 hover:shadow-glow-sm'}`}
+                                        >
+                                            <div className="flex items-start gap-4">
+                                                <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg ${isRedeemed ? 'bg-success/20' : isPending ? 'bg-warning/20' : isApproved ? 'bg-primary/20' : getCategoryColor(activity.category)}`}>
+                                                    {isRedeemed ? (
+                                                        <Icon name="CheckCircleIcon" size={24} className="text-success" />
+                                                    ) : isPending ? (
+                                                        <Icon name="ClockIcon" size={24} className="text-warning" />
+                                                    ) : isApproved ? (
+                                                        <Icon name="SparklesIcon" size={24} className="text-primary" />
+                                                    ) : (
+                                                        <Icon name={activity.icon} size={24} />
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h3 className="font-caption text-sm font-medium text-foreground">{activity.title}</h3>
+                                                    <p className="mt-1 font-caption text-xs text-muted-foreground line-clamp-2">{activity.description}</p>
+                                                    <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
+                                                        <div className="flex items-center gap-1">
+                                                            <Icon name="CurrencyDollarIcon" size={14} className="text-primary" />
+                                                            <span className="font-mono text-sm font-bold text-primary">+{activity.tokens}</span>
+                                                            <span className="font-caption text-xs text-muted-foreground">EDU</span>
+                                                        </div>
+                                                        {isBelow50 ? (
+                                                            <span className="font-caption text-xs text-error">Min: 50 EDU</span>
+                                                        ) : isRedeemed ? (
+                                                            <span className="flex items-center gap-1 rounded-md bg-success px-2 py-1 font-caption text-xs font-medium text-success-foreground">
+                                                                <Icon name="CheckIcon" size={12} />
+                                                                <span>Earned</span>
+                                                            </span>
+                                                        ) : isPending ? (
+                                                            <span className="flex items-center gap-1 rounded-md bg-warning/20 border border-warning/30 px-2 py-1 font-caption text-xs font-medium text-warning">
+                                                                <Icon name="ClockIcon" size={12} />
+                                                                <span>Pending Verification</span>
+                                                            </span>
+                                                        ) : isApproved ? (
+                                                            <button
+                                                                onClick={() => handleRedeemActivity(activity)}
+                                                                disabled={isProcessing}
+                                                                className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 font-caption text-xs font-medium text-primary-foreground transition-smooth hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {isProcessing ? (
+                                                                    <>
+                                                                        <Icon name="ArrowPathIcon" size={12} className="animate-spin" />
+                                                                        <span>Redeeming...</span>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Icon name="SparklesIcon" size={12} />
+                                                                        <span>Redeem Tokens</span>
+                                                                    </>
+                                                                )}
+                                                            </button>
                                                         ) : (
-                                                            <Icon name="PlusIcon" size={12} />
+                                                            <Link
+                                                                href={`/submit/${activity.id}`}
+                                                                className="flex items-center gap-1 rounded-md bg-secondary px-2 py-1 font-caption text-xs font-medium text-secondary-foreground transition-smooth hover:scale-[0.98]"
+                                                            >
+                                                                <Icon name="PaperAirplaneIcon" size={12} />
+                                                                <span>Submit Task</span>
+                                                            </Link>
                                                         )}
-                                                        <span>Simulate</span>
-                                                    </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Total Earnings Panel */}
+                        <div className="rounded-xl bg-gradient-to-r from-primary/10 via-accent/10 to-secondary/10 border border-border p-6">
+                            <h3 className="mb-4 font-heading text-lg font-bold text-foreground">Your Earnings Summary</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="rounded-lg bg-card border border-border p-4 text-center">
+                                    <div className="flex items-center justify-center gap-2 mb-2">
+                                        <Icon name="ArrowTrendingUpIcon" size={20} className="text-success" />
+                                        <span className="font-caption text-sm text-muted-foreground">Total Earned (Session)</span>
                                     </div>
-                                ))}
+                                    <p className="font-heading text-2xl font-bold text-success">+{totalEarned} EDU</p>
+                                </div>
+                                <div className="rounded-lg bg-card border border-border p-4 text-center">
+                                    <div className="flex items-center justify-center gap-2 mb-2">
+                                        <Icon name="WalletIcon" size={20} className="text-primary" />
+                                        <span className="font-caption text-sm text-muted-foreground">Current Balance</span>
+                                    </div>
+                                    <p className="font-heading text-2xl font-bold text-primary">{userProfile?.tokens || 0} EDU</p>
+                                </div>
+                                <div className="rounded-lg bg-card border border-border p-4 text-center">
+                                    <div className="flex items-center justify-center gap-2 mb-2">
+                                        <Icon name="CheckBadgeIcon" size={20} className="text-accent" />
+                                        <span className="font-caption text-sm text-muted-foreground">Activities Completed</span>
+                                    </div>
+                                    <p className="font-heading text-2xl font-bold text-accent">{earnedActivities.length}/{earnActivities.filter(a => a.tokens >= 50).length}</p>
+                                </div>
                             </div>
                         </div>
                     </div>

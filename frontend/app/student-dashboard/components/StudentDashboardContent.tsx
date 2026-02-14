@@ -1,16 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import ProgressOverview from './ProgressOverview';
 import CourseCard from './CourseCard';
 import AchievementBadge from './AchievementBadge';
-import ActivityFeed from './ActivityFeed';
-import UpcomingDeadlines from './UpcomingDeadlines';
-import LearningStats from './LearningStats';
 import Icon from '@/components/ui/AppIcon';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Interfaces
 interface Course {
     id: number;
     title: string;
@@ -34,25 +32,6 @@ interface Achievement {
     rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
 }
 
-interface Activity {
-    id: number;
-    type: 'course_completed' | 'token_earned' | 'achievement_unlocked' | 'streak_milestone';
-    title: string;
-    description: string;
-    timestamp: string;
-    icon: string;
-    color: string;
-}
-
-interface Deadline {
-    id: number;
-    title: string;
-    courseName: string;
-    dueDate: string;
-    priority: 'High' | 'Medium' | 'Low';
-    type: 'Assignment' | 'Quiz' | 'Project' | 'Exam';
-}
-
 interface StatData {
     label: string;
     value: string;
@@ -63,6 +42,23 @@ interface StatData {
 
 const StudentDashboardContent = () => {
     const { user, userProfile } = useAuth();
+
+    // Mock Data
+    const isConnected = true;
+    const balance = 1250;
+    const certificateBalance = 5;
+
+    // Mock courses
+    const studentCourses = [
+        { serviceId: 101, serviceName: "Intro to Web3", tokensPaid: 100 * 1e18 },
+        { serviceId: 102, serviceName: "React Basics", tokensPaid: 50 * 1e18 }
+    ];
+
+    const services = [
+        { id: 201, name: "Advanced Node.js", tokenCost: 75 * 1e18, serviceType: 1 },
+        { id: 202, name: "Solidity Security", tokenCost: 150 * 1e18, serviceType: 1 }
+    ];
+
     const [isHydrated, setIsHydrated] = useState(false);
     const [activeTab, setActiveTab] = useState<'enrolled' | 'available'>('enrolled');
 
@@ -70,230 +66,125 @@ const StudentDashboardContent = () => {
         setIsHydrated(true);
     }, []);
 
-    // Dynamic progress data based on user profile
-    const progressData = {
-        coursesCompleted: userProfile?.coursesCompleted || 0,
-        totalCourses: (userProfile?.coursesCompleted || 0) + (userProfile?.coursesInProgress || 0) + 3,
-        tokensEarned: userProfile?.tokens || 0,
-        hoursLearned: Math.floor((userProfile?.coursesCompleted || 0) * 5.5),
-        currentStreak: 12,
-        overallProgress: userProfile?.coursesCompleted
-            ? Math.floor((userProfile.coursesCompleted / ((userProfile.coursesCompleted || 0) + (userProfile.coursesInProgress || 0) + 3)) * 100)
-            : 0
-    };
+    // 1. Safe derived state for Progress
+    const progressData = useMemo(() => {
+        const completed = studentCourses ? studentCourses.filter((c: any) => Number(c.serviceType) === 1).length : 0;
+        const total = studentCourses ? studentCourses.length : 0;
+        // Assume courses take roughly 5.5h on average for this metric
+        const hours = Math.floor(total * 5.5);
+        const tokenBalance = balance ? Number(balance) / 1e18 : 0;
 
-    const enrolledCourses: Course[] = [
-        {
-            id: 1,
-            title: "Blockchain Fundamentals",
-            description: "Master the core concepts of blockchain technology, including distributed ledgers, consensus mechanisms, and cryptographic principles.",
+        return {
+            coursesCompleted: completed,
+            totalCourses: total,
+            tokensEarned: tokenBalance,
+            hoursLearned: hours,
+            currentStreak: total > 0 ? 1 : 0, // dynamic streak based on activity
+            overallProgress: total > 0 ? 100 : 0
+        };
+    }, [studentCourses, balance]);
+
+    // 2. Map blockchain services to UI Course objects
+    const mappedEnrolledCourses: Course[] = useMemo(() => {
+        return (studentCourses || []).map((p: any) => ({
+            id: Number(p.serviceId),
+            title: p.serviceName,
+            description: `Successfully enrolled in ${p.serviceName}`,
             image: "https://images.unsplash.com/photo-1649682892309-e10e0b7cd40b",
-            alt: "Digital blockchain network visualization with glowing blue nodes and connections on dark background",
-            progress: 75,
+            alt: "Course Image",
+            progress: 100,
             difficulty: 'Intermediate',
-            tokenReward: 150,
-            duration: "6 hours",
+            tokenReward: Number(p.tokensPaid) / 1e18,
+            duration: "Self-Paced",
             enrolled: true
-        },
-        {
-            id: 2,
-            title: "Smart Contract Development",
-            description: "Learn to write, deploy, and test smart contracts using Solidity and industry-standard development frameworks.",
-            image: "https://images.unsplash.com/photo-1534137667199-675a46e143f3",
-            alt: "Computer screen displaying colorful code editor with programming syntax highlighting",
-            progress: 45,
-            difficulty: 'Advanced',
-            tokenReward: 200,
-            duration: "8 hours",
-            enrolled: true
-        },
-        {
-            id: 3,
-            title: "Cryptocurrency Trading Basics",
-            description: "Understand market dynamics, technical analysis, and risk management strategies for cryptocurrency trading.",
-            image: "https://img.rocket.new/generatedImages/rocket_gen_img_12fb302af-1767707274231.png",
-            alt: "Financial trading charts with candlestick patterns and trend lines on multiple monitors",
-            progress: 90,
-            difficulty: 'Beginner',
-            tokenReward: 100,
-            duration: "4 hours",
-            enrolled: true
-        }
-    ];
+        }));
+    }, [studentCourses]);
 
-    const availableCourses: Course[] = [
-        {
-            id: 4,
-            title: "DeFi Protocols & Applications",
-            description: "Explore decentralized finance protocols, liquidity pools, yield farming, and the future of financial services.",
-            image: "https://img.rocket.new/generatedImages/rocket_gen_img_136f7b22f-1767598784543.png",
-            alt: "Abstract digital finance concept with interconnected geometric shapes and glowing elements",
-            progress: 0,
-            difficulty: 'Advanced',
-            tokenReward: 250,
-            duration: "10 hours",
-            enrolled: false
-        },
-        {
-            id: 5,
-            title: "NFT Creation & Marketing",
-            description: "Learn how to create, mint, and market non-fungible tokens across various blockchain platforms.",
-            image: "https://img.rocket.new/generatedImages/rocket_gen_img_12ff3d6a0-1766511958579.png",
-            alt: "Colorful digital art gallery showcasing various NFT artworks on virtual display screens",
-            progress: 0,
-            difficulty: 'Intermediate',
-            tokenReward: 175,
-            duration: "7 hours",
-            enrolled: false
-        },
-        {
-            id: 6,
-            title: "Web3 Development Essentials",
-            description: "Build decentralized applications using modern Web3 frameworks, libraries, and best practices.",
-            image: "https://img.rocket.new/generatedImages/rocket_gen_img_1278e5e50-1764670617656.png",
-            alt: "Developer workspace with laptop showing web development code and design mockups",
-            progress: 0,
-            difficulty: 'Intermediate',
-            tokenReward: 180,
-            duration: "9 hours",
-            enrolled: false
-        }
-    ];
+    const mappedAvailableCourses: Course[] = useMemo(() => {
+        return (services || [])
+            .filter((s: any) => Number(s.serviceType) === 1) // Only courses
+            .map((s: any) => ({
+                id: Number(s.id),
+                title: s.name,
+                description: `Join our ${s.name} and earn rewards.`,
+                image: "https://img.rocket.new/generatedImages/rocket_gen_img_136f7b22f-1767598784543.png",
+                alt: s.name,
+                progress: 0,
+                difficulty: 'Intermediate',
+                tokenReward: Number(s.tokenCost) / 1e18,
+                duration: "Self-Paced",
+                enrolled: (studentCourses || []).some((p: any) => Number(p.serviceId) === Number(s.id))
+            }));
+    }, [services, studentCourses]);
 
-    const achievements: Achievement[] = [
-        {
-            id: 1,
-            title: "First Steps",
-            description: "Complete your first course",
-            icon: "AcademicCapIcon",
-            earned: (userProfile?.coursesCompleted || 0) >= 1,
-            earnedDate: (userProfile?.coursesCompleted || 0) >= 1 ? "Recently" : undefined,
-            rarity: 'Common'
-        },
-        {
-            id: 2,
-            title: "Token Collector",
-            description: "Earn 100 tokens",
-            icon: "CurrencyDollarIcon",
-            earned: (userProfile?.tokens || 0) >= 100,
-            earnedDate: (userProfile?.tokens || 0) >= 100 ? "Recently" : undefined,
-            rarity: 'Rare'
-        },
-        {
-            id: 3,
-            title: "Streak Master",
-            description: "Maintain a 7-day learning streak",
-            icon: "FireIcon",
-            earned: true,
-            earnedDate: "Jan 10, 2026",
-            rarity: 'Epic'
-        },
-        {
-            id: 4,
-            title: "Knowledge Seeker",
-            description: "Complete 10 courses",
-            icon: "BookOpenIcon",
-            earned: (userProfile?.coursesCompleted || 0) >= 10,
-            rarity: 'Legendary'
-        }
-    ];
+    // 3. Achievements based on real data
+    const achievements: Achievement[] = useMemo(() => {
+        const courseCount = studentCourses?.length || 0;
+        const tokenBalance = balance ? Number(balance) / 1e18 : 0;
 
-    const activities: Activity[] = [
-        {
-            id: 1,
-            type: 'course_completed',
-            title: "Course Completed",
-            description: "Finished 'Cryptocurrency Trading Basics' with 95% score",
-            timestamp: "2 hours ago",
-            icon: "CheckCircleIcon",
-            color: "text-accent"
-        },
-        {
-            id: 2,
-            type: 'token_earned',
-            title: "Tokens Earned",
-            description: `Received ${userProfile?.tokens || 0} L2E tokens total`,
-            timestamp: "Recently",
-            icon: "CurrencyDollarIcon",
-            color: "text-primary"
-        },
-        {
-            id: 3,
-            type: 'achievement_unlocked',
-            title: "Achievement Unlocked",
-            description: "Earned 'Streak Master' achievement",
-            timestamp: "1 day ago",
-            icon: "TrophyIcon",
-            color: "text-secondary"
-        },
-        {
-            id: 4,
-            type: 'streak_milestone',
-            title: "Streak Milestone",
-            description: "Reached 12-day learning streak",
-            timestamp: "1 day ago",
-            icon: "FireIcon",
-            color: "text-warning"
-        }
-    ];
+        return [
+            {
+                id: 1,
+                title: "First Steps",
+                description: "Complete your first course",
+                icon: "AcademicCapIcon",
+                earned: courseCount >= 1,
+                earnedDate: courseCount >= 1 ? "Recently" : undefined,
+                rarity: 'Common'
+            },
+            {
+                id: 2,
+                title: "Token Collector",
+                description: "Earn 100 EDU tokens",
+                icon: "CurrencyDollarIcon",
+                earned: tokenBalance >= 100,
+                rarity: 'Rare'
+            },
+            {
+                id: 3,
+                title: "Knowledge Seeker",
+                description: "Enroll in 5 courses",
+                icon: "BookOpenIcon",
+                earned: courseCount >= 5,
+                rarity: 'Epic'
+            },
+            {
+                id: 4,
+                title: "Master Scholar",
+                description: "Enroll in 10 courses",
+                icon: "TrophyIcon",
+                earned: courseCount >= 10,
+                rarity: 'Legendary'
+            }
+        ];
+    }, [studentCourses, balance]);
 
-    const deadlines: Deadline[] = [
-        {
-            id: 1,
-            title: "Smart Contract Quiz",
-            courseName: "Smart Contract Development",
-            dueDate: "Jan 15, 2026",
-            priority: 'High',
-            type: 'Quiz'
-        },
-        {
-            id: 2,
-            title: "Blockchain Project Submission",
-            courseName: "Blockchain Fundamentals",
-            dueDate: "Jan 18, 2026",
-            priority: 'Medium',
-            type: 'Project'
-        },
-        {
-            id: 3,
-            title: "Trading Strategy Assignment",
-            courseName: "Cryptocurrency Trading Basics",
-            dueDate: "Jan 22, 2026",
-            priority: 'Low',
-            type: 'Assignment'
-        }
-    ];
-
-    const learningStats: StatData[] = [
-        {
-            label: "Average Score",
-            value: "87%",
-            change: 5,
-            icon: "ChartBarIcon",
-            color: "bg-secondary/20 text-secondary"
-        },
-        {
-            label: "Completion Rate",
-            value: "92%",
-            change: 8,
-            icon: "CheckCircleIcon",
-            color: "bg-accent/20 text-accent"
-        },
-        {
-            label: "Study Time",
-            value: "3.2h/day",
-            change: -2,
-            icon: "ClockIcon",
-            color: "bg-primary/20 text-primary"
-        },
-        {
-            label: "Rank",
-            value: "#47",
-            change: 12,
-            icon: "TrophyIcon",
-            color: "bg-warning/20 text-warning"
-        }
-    ];
+    const learningStats: StatData[] = useMemo(() => {
+        const completed = studentCourses ? studentCourses.filter((c: any) => Number(c.serviceType) === 1).length : 0;
+        return [
+            {
+                label: "Courses Enrolled",
+                value: (studentCourses?.length || 0).toString(),
+                change: 0,
+                icon: "ChartBarIcon",
+                color: "bg-secondary/20 text-secondary"
+            },
+            {
+                label: "Completion Rate",
+                value: (studentCourses?.length > 0 ? "100%" : "0%"),
+                change: 0,
+                icon: "CheckCircleIcon",
+                color: "bg-accent/20 text-accent"
+            },
+            {
+                label: "Certificates",
+                value: (certificateBalance?.toString() || "0"),
+                change: 0,
+                icon: "TrophyIcon",
+                color: "bg-warning/20 text-warning"
+            }
+        ];
+    }, [studentCourses, certificateBalance]);
 
     if (!isHydrated) {
         return (
@@ -307,7 +198,6 @@ const StudentDashboardContent = () => {
                         </div>
                         <div className="space-y-6">
                             <div className="h-64 animate-pulse rounded-xl bg-muted" />
-                            <div className="h-64 animate-pulse rounded-xl bg-muted" />
                         </div>
                     </div>
                 </div>
@@ -315,7 +205,6 @@ const StudentDashboardContent = () => {
         );
     }
 
-    // Get user's display name
     const displayName = userProfile?.name || user?.displayName || 'Student';
     const firstName = displayName.split(' ')[0];
 
@@ -334,29 +223,30 @@ const StudentDashboardContent = () => {
                                     Welcome back, {firstName}!
                                 </h1>
                                 <p className="font-caption text-sm text-muted-foreground">
-                                    {userProfile?.email || user?.email}
+                                    {userProfile?.email || user?.email || 'Student'}
                                 </p>
                             </div>
                         </div>
                         <div className="flex items-center gap-6">
                             <div className="text-center">
                                 <div className="font-heading text-2xl font-bold text-primary">
-                                    {userProfile?.tokens || 0}
+                                    {balance}
                                 </div>
                                 <div className="font-caption text-xs text-muted-foreground">EDU Tokens</div>
                             </div>
                             <div className="text-center">
                                 <div className="font-heading text-2xl font-bold text-secondary">
-                                    {userProfile?.coursesCompleted || 0}
+                                    {studentCourses?.length || 0}
                                 </div>
-                                <div className="font-caption text-xs text-muted-foreground">Courses Done</div>
+                                <div className="font-caption text-xs text-muted-foreground">Courses Enrolled</div>
                             </div>
                             <div className="text-center">
                                 <div className="font-heading text-2xl font-bold text-accent">
-                                    {userProfile?.certificates || 0}
+                                    {certificateBalance ? Number(certificateBalance) : 0}
                                 </div>
                                 <div className="font-caption text-xs text-muted-foreground">Certificates</div>
                             </div>
+
                             <Link
                                 href="/profile-settings"
                                 className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 font-caption text-sm text-muted-foreground hover:border-primary/50 hover:text-foreground transition-smooth"
@@ -366,25 +256,13 @@ const StudentDashboardContent = () => {
                             </Link>
                         </div>
                     </div>
-                    {/* Wallet Address */}
-                    <div className="mt-4 pt-4 border-t border-border">
-                        <div className="flex items-center gap-2">
-                            <Icon name="WalletIcon" size={16} className="text-muted-foreground" />
-                            <span className="font-caption text-xs text-muted-foreground">Wallet:</span>
-                            <code className="font-mono text-xs text-foreground bg-background/50 px-2 py-1 rounded">
-                                {userProfile?.walletAddress || 'Not connected'}
-                            </code>
-                        </div>
-                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     <div className="lg:col-span-2 space-y-6">
                         <ProgressOverview data={progressData} />
 
-                        <div
-                            className="overflow-hidden rounded-xl bg-card p-6 shadow-glow-sm backdrop-blur-sm"
-                        >
+                        <div className="overflow-hidden rounded-xl bg-card p-6 shadow-glow-sm backdrop-blur-sm">
                             <div className="mb-6 flex items-center justify-between">
                                 <h2 className="font-heading text-2xl font-bold text-foreground">
                                     My Courses
@@ -412,23 +290,46 @@ const StudentDashboardContent = () => {
                             </div>
 
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                {(activeTab === 'enrolled' ? enrolledCourses : availableCourses).map((course) => (
-                                    <CourseCard
-                                        key={course.id}
-                                        course={course}
-                                        onEnroll={(id) => {
-                                            alert(`Enrolling in course ${id}... (Mock Action)`);
-                                        }}
-                                    />
+                                {(activeTab === 'enrolled' ? mappedEnrolledCourses : mappedAvailableCourses).length === 0 ? (
+                                    <div className="col-span-2 text-center py-8 text-muted-foreground">
+                                        {activeTab === 'enrolled'
+                                            ? "You haven't enrolled in any courses yet."
+                                            : "No courses available at the moment."}
+                                    </div>
+                                ) : (
+                                    (activeTab === 'enrolled' ? mappedEnrolledCourses : mappedAvailableCourses).map((course) => (
+                                        <CourseCard
+                                            key={course.id}
+                                            course={course}
+                                            onEnroll={async (id) => {
+                                                alert("Successfully enrolled (Mock)!");
+                                            }}
+                                        />
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="overflow-hidden rounded-xl bg-card p-6 shadow-glow-sm backdrop-blur-sm">
+                            <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">
+                                Learning Stats
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {learningStats.map((stat, index) => (
+                                    <div key={index} className={`p-4 rounded-xl border border-border ${stat.color.replace('text-', 'border-').split(' ')[0]} bg-card/30`}>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className={`p-2 rounded-md ${stat.color}`}>
+                                                <Icon name={stat.icon as any} size={20} />
+                                            </div>
+                                            <span className="text-sm font-medium text-muted-foreground">{stat.label}</span>
+                                        </div>
+                                        <div className="text-2xl font-bold text-foreground">{stat.value}</div>
+                                    </div>
                                 ))}
                             </div>
                         </div>
 
-                        <LearningStats stats={learningStats} />
-
-                        <div
-                            className="overflow-hidden rounded-xl bg-card p-6 shadow-glow-sm backdrop-blur-sm"
-                        >
+                        <div className="overflow-hidden rounded-xl bg-card p-6 shadow-glow-sm backdrop-blur-sm">
                             <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">
                                 Achievements
                             </h2>
@@ -441,17 +342,16 @@ const StudentDashboardContent = () => {
                     </div>
 
                     <div className="space-y-6">
-                        <ActivityFeed activities={activities} />
-                        <UpcomingDeadlines deadlines={deadlines} />
 
-                        <div
-                            className="overflow-hidden rounded-xl bg-card p-6 shadow-glow-sm backdrop-blur-sm"
-                        >
+                        <div className="overflow-hidden rounded-xl bg-card p-6 shadow-glow-sm backdrop-blur-sm">
                             <h3 className="mb-4 font-heading text-xl font-bold text-foreground">
                                 Quick Actions
                             </h3>
                             <div className="space-y-3">
-                                <button className="flex w-full items-center gap-3 rounded-lg bg-primary p-4 font-caption text-sm font-medium text-primary-foreground transition-smooth hover:scale-[0.98] hover:shadow-glow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background">
+                                <button
+                                    onClick={() => setActiveTab('available')}
+                                    className="flex w-full items-center gap-3 rounded-lg bg-primary p-4 font-caption text-sm font-medium text-primary-foreground transition-smooth hover:scale-[0.98] hover:shadow-glow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+                                >
                                     <Icon name="AcademicCapIcon" size={20} />
                                     <span>Browse All Courses</span>
                                 </button>

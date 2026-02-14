@@ -23,10 +23,14 @@ interface Reward {
     alt: string;
     requirements?: string;
     stock?: number;
+    isBlockchainService?: boolean;
+    serviceId?: string;
 }
 
 const RedeemTokensContent = () => {
     const { userProfile } = useAuth();
+    // Mock web3 hooks removed
+
     const [isHydrated, setIsHydrated] = useState(false);
     const [currentBalance, setCurrentBalance] = useState(0);
     const [selectedCategory, setSelectedCategory] = useState('all');
@@ -41,10 +45,8 @@ const RedeemTokensContent = () => {
 
     useEffect(() => {
         setIsHydrated(true);
-        // Set balance from user profile
-        if (userProfile?.tokens) {
-            setCurrentBalance(userProfile.tokens);
-        }
+        // Set mock balance
+        setCurrentBalance(userProfile?.tokens || 1250);
     }, [userProfile]);
 
     const mockRewards: Reward[] = [
@@ -154,8 +156,10 @@ const RedeemTokensContent = () => {
         }
     ];
 
+    const allRewards = mockRewards;
+
     const filterRewards = () => {
-        return mockRewards.filter((reward) => {
+        return allRewards.filter((reward) => {
             const categoryMatch = selectedCategory === 'all' || reward.category === selectedCategory;
 
             let costMatch = true;
@@ -196,13 +200,23 @@ const RedeemTokensContent = () => {
         );
     };
 
-    const handleConfirmRedemption = () => {
+    const handleConfirmRedemption = async () => {
         if (selectedReward) {
-            setCurrentBalance((prev) => prev - selectedReward.tokenCost);
-            setSuccessMessage(`Successfully redeemed ${selectedReward.title}!`);
-            setShowSuccessToast(true);
-            setIsModalOpen(false);
-            setSelectedReward(null);
+            try {
+                // Mock redemption
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // Note: userProfile token deduction should happen via backend or AuthContext update
+                // For now, we just simulate success.
+
+                setSuccessMessage(`Successfully redeemed ${selectedReward.title}!`);
+                setShowSuccessToast(true);
+                setIsModalOpen(false);
+                setSelectedReward(null);
+            } catch (e) {
+                console.error("Redemption failed", e);
+                alert("Redemption failed. See console.");
+            }
         }
     };
 

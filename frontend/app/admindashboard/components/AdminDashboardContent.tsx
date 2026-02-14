@@ -9,8 +9,12 @@ import FilterControls from './FilterControls';
 import UserTableRow from './UserTableRow';
 import PopularCourses from './PopularCourses';
 import TokenEconomyWidget from './TokenEconomyWidget';
+import CreateServicePanel from './CreateServicePanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAllUserProfiles, UserProfile } from '@/lib/mockDataStore';
+// import { getPendingSubmissions, approveSubmission, rejectSubmission, type ActivitySubmission } from '@/lib/activitySubmissionsStore'; // Removed
+
+import { useCallback } from 'react';
 
 // Lazy load AnalyticsChart - recharts is heavy (~500KB)
 const AnalyticsChart = dynamic(() => import('./AnalyticsChart'), {
@@ -62,6 +66,128 @@ interface TokenMetric {
     color: string;
 }
 
+
+const PendingSubmissionsSection = ({
+    submissions,
+    processingSubmission,
+    onApprove,
+    onReject,
+    onRefresh,
+    isLoading
+}: {
+    submissions: any[]; // Relaxed type for Web3 usage
+    processingSubmission: string | null;
+    onApprove: (submission: any) => void;
+    onReject: (submission: any) => void;
+    onRefresh: () => void;
+    isLoading?: boolean;
+}) => {
+    return (
+        <div id="submissions" className="mb-8 rounded-xl bg-card border border-border p-6">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h2 className="font-heading text-2xl font-bold text-foreground">Pending Submissions</h2>
+                    <p className="mt-1 font-caption text-sm text-muted-foreground">
+                        Review and approve student activity submissions
+                    </p>
+                </div>
+                <button
+                    onClick={onRefresh}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-2 font-caption text-xs text-foreground hover:bg-background transition-smooth disabled:opacity-50"
+                >
+                    <Icon name="ArrowPathIcon" size={14} className={isLoading ? "animate-spin" : ""} />
+                    <span>Refresh</span>
+                </button>
+            </div>
+
+            {submissions.length === 0 ? (
+                <div className="text-center py-12">
+                    <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-full bg-muted mb-4">
+                        <Icon name="InboxIcon" size={32} className="text-muted-foreground" />
+                    </div>
+                    <p className="font-caption text-muted-foreground">No pending submissions to review</p>
+                    <p className="font-caption text-xs text-muted-foreground mt-1">When students submit tasks, they will appear here</p>
+                </div>
+            ) : (
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="border-b border-border">
+                                <th className="text-left py-3 px-4 font-caption text-xs font-medium text-muted-foreground uppercase tracking-wider">Student</th>
+                                <th className="text-left py-3 px-4 font-caption text-xs font-medium text-muted-foreground uppercase tracking-wider">Activity</th>
+                                <th className="text-left py-3 px-4 font-caption text-xs font-medium text-muted-foreground uppercase tracking-wider">Proof</th>
+                                <th className="text-left py-3 px-4 font-caption text-xs font-medium text-muted-foreground uppercase tracking-wider">Tokens</th>
+                                <th className="text-left py-3 px-4 font-caption text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
+                                <th className="text-right py-3 px-4 font-caption text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                            {submissions.map((submission) => {
+                                const isProcessing = processingSubmission === `${submission.activityId}-${submission.studentId}`;
+                                return (
+                                    <tr key={`${submission.activityId}-${submission.studentId}`} className="hover:bg-muted/50 transition-smooth">
+                                        <td className="py-4 px-4">
+                                            <div>
+                                                <p className="font-caption text-sm font-medium text-foreground">
+                                                    {submission.studentId.substring(0, 6)}...{submission.studentId.substring(38)}
+                                                </p>
+                                                <p className="font-caption text-xs text-muted-foreground">{submission.studentEmail || 'Blockchain User'}</p>
+                                            </div>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <span className="font-caption text-sm text-foreground">{submission.activityTitle}</span>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <div className="max-w-[200px]">
+                                                <p className="font-caption text-xs text-muted-foreground truncate" title={submission.proofValue}>
+                                                    {submission.description}
+                                                </p>
+                                            </div>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <span className="font-mono text-sm font-bold text-primary">+{submission.tokens} EDU</span>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <span className="font-caption text-xs text-muted-foreground">
+                                                {new Date(Number(submission.submittedAt) * 1000).toLocaleDateString()}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => onApprove(submission)}
+                                                    disabled={isProcessing}
+                                                    className="flex items-center gap-1 rounded-lg bg-success px-3 py-1.5 font-caption text-xs font-medium text-success-foreground transition-smooth hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {isProcessing ? (
+                                                        <Icon name="ArrowPathIcon" size={12} className="animate-spin" />
+                                                    ) : (
+                                                        <Icon name="CheckIcon" size={12} />
+                                                    )}
+                                                    <span>Approve</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => onReject(submission)}
+                                                    disabled={isProcessing}
+                                                    className="flex items-center gap-1 rounded-lg bg-error px-3 py-1.5 font-caption text-xs font-medium text-error-foreground transition-smooth hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    <Icon name="XMarkIcon" size={12} />
+                                                    <span>Reject</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const AdminDashboardContent = () => {
     const router = useRouter();
     const { adminLogout } = useAuth();
@@ -76,14 +202,28 @@ const AdminDashboardContent = () => {
     const [toastMessage, setToastMessage] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+    const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'services' | 'users'>('overview');
+
     const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>([]);
+    const [realPendingSubmissions, setRealPendingSubmissions] = useState<any[]>([]);
+    const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
+    const [processingSubmission, setProcessingSubmission] = useState<string | null>(null);
+
+    // Removed fetchAllPendingActivities logic
 
     useEffect(() => {
         setIsHydrated(true);
-        // Load registered users from mock store
-        const users = getAllUserProfiles();
-        setRegisteredUsers(users);
+
+        const loadData = () => {
+            // Mock users still loaded for User Management Table (as we don't have on-chain registry)
+            const users = getAllUserProfiles();
+            setRegisteredUsers(users);
+        };
+
+        loadData();
     }, []);
+
+
 
     // Convert registered users to display format
     const registeredUsersList: User[] = registeredUsers.map((profile, index) => ({
@@ -386,30 +526,8 @@ const AdminDashboardContent = () => {
                                 Manage users, monitor platform performance, and analyze learning metrics
                             </p>
                         </div>
-                        <div className="flex flex-wrap gap-3">
-                            <button
-                                onClick={handleAddUser}
-                                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-caption text-sm font-medium text-primary-foreground transition-smooth hover:scale-[0.98] hover:shadow-glow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-                            >
-                                <Icon name="PlusIcon" size={18} />
-                                Add User
-                            </button>
-                            <button
-                                onClick={handleExportData}
-                                className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 font-caption text-sm font-medium text-foreground transition-smooth hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-                            >
-                                <Icon name="ArrowDownTrayIcon" size={18} />
-                                Export Data
-                            </button>
-                            <button
-                                onClick={handleLogout}
-                                className="flex items-center gap-2 rounded-lg border border-error/50 bg-card px-4 py-2.5 font-caption text-sm font-medium text-error transition-smooth hover:bg-error/10 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2 focus:ring-offset-background"
-                            >
-                                <Icon name="ArrowRightOnRectangleIcon" size={18} />
-                                Logout
-                            </button>
-                        </div>
                     </div>
+
                 </div>
 
                 {/* Registered Users Banner */}
@@ -424,144 +542,200 @@ const AdminDashboardContent = () => {
                     </div>
                 )}
 
-                <div className="mb-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    {statsData.map((stat) => (
-                        <StatCard key={stat.title} {...stat} />
-                    ))}
+                {/* Admin Navigation Tabs */}
+                <div className="mb-8 flex items-center gap-2 p-1 bg-muted rounded-lg w-fit overflow-x-auto">
+                    <button
+                        onClick={() => setActiveAdminTab('overview')}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-md font-caption text-sm font-medium transition-smooth whitespace-nowrap ${activeAdminTab === 'overview'
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                            }`}
+                    >
+                        <Icon name="ChartBarIcon" size={16} />
+                        Overview
+                    </button>
+                    <button
+                        onClick={() => setActiveAdminTab('services')}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-md font-caption text-sm font-medium transition-smooth whitespace-nowrap ${activeAdminTab === 'services'
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                            }`}
+                    >
+                        <Icon name="RocketLaunchIcon" size={16} />
+                        Hackathons & Courses
+                    </button>
+                    <button
+                        onClick={() => setActiveAdminTab('users')}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-md font-caption text-sm font-medium transition-smooth whitespace-nowrap ${activeAdminTab === 'users'
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                            }`}
+                    >
+                        <Icon name="UserGroupIcon" size={16} />
+                        Users & Submissions
+                    </button>
                 </div>
 
-                <div className="mb-8 grid gap-6 lg:grid-cols-3">
-                    <div className="lg:col-span-2">
-                        <AnalyticsChart data={chartData} />
+                {/* Tab Content */}
+                {activeAdminTab === 'services' && (
+                    <div className="mb-8">
+                        <CreateServicePanel onServiceCreated={() => {
+                            setToastMessage('Service created successfully');
+                            setShowToast(true);
+                            setTimeout(() => setShowToast(false), 3000);
+                        }} />
                     </div>
-                    <div className="space-y-6">
-                        <TokenEconomyWidget metrics={tokenMetrics} />
-                    </div>
-                </div>
+                )}
 
-                <div className="mb-8">
-                    <PopularCourses courses={popularCourses} />
-                </div>
-
-                <div className="rounded-xl bg-card p-6">
-                    <div className="mb-6">
-                        <h2 className="font-heading text-2xl font-bold text-foreground">User Management</h2>
-                        <p className="mt-1 font-caption text-sm text-muted-foreground">
-                            View and manage all registered users on the platform
-                        </p>
-                    </div>
-
-                    <div className="mb-6">
-                        <FilterControls
-                            searchQuery={searchQuery}
-                            onSearchChange={setSearchQuery}
-                            selectedCategory={selectedCategory}
-                            onCategoryChange={setSelectedCategory}
-                            selectedStatus={selectedStatus}
-                            onStatusChange={setSelectedStatus}
-                            dateRange={dateRange}
-                            onDateRangeChange={setDateRange}
-                        />
-                    </div>
-
-                    <div className="overflow-x-auto scrollbar-custom">
-                        <table className="w-full min-w-[800px]">
-                            <thead>
-                                <tr className="border-b border-border">
-                                    <th className="px-6 py-4 text-left">
-                                        <button
-                                            onClick={() => handleSort('name')}
-                                            className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
-                                        >
-                                            User
-                                            <Icon
-                                                name={sortColumn === 'name' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
-                                                size={14}
-                                                className={sortColumn === 'name' ? 'text-primary' : ''}
-                                            />
-                                        </button>
-                                    </th>
-                                    <th className="px-6 py-4 text-left">
-                                        <button
-                                            onClick={() => handleSort('enrollmentDate')}
-                                            className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
-                                        >
-                                            Enrollment
-                                            <Icon
-                                                name={sortColumn === 'enrollmentDate' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
-                                                size={14}
-                                                className={sortColumn === 'enrollmentDate' ? 'text-primary' : ''}
-                                            />
-                                        </button>
-                                    </th>
-                                    <th className="px-6 py-4 text-left">
-                                        <button
-                                            onClick={() => handleSort('status')}
-                                            className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
-                                        >
-                                            Status
-                                            <Icon
-                                                name={sortColumn === 'status' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
-                                                size={14}
-                                                className={sortColumn === 'status' ? 'text-primary' : ''}
-                                            />
-                                        </button>
-                                    </th>
-                                    <th className="px-6 py-4 text-left">
-                                        <button
-                                            onClick={() => handleSort('progress')}
-                                            className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
-                                        >
-                                            Progress
-                                            <Icon
-                                                name={sortColumn === 'progress' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
-                                                size={14}
-                                                className={sortColumn === 'progress' ? 'text-primary' : ''}
-                                            />
-                                        </button>
-                                    </th>
-                                    <th className="px-6 py-4 text-left">
-                                        <button
-                                            onClick={() => handleSort('tokensEarned')}
-                                            className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
-                                        >
-                                            Tokens
-                                            <Icon
-                                                name={sortColumn === 'tokensEarned' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
-                                                size={14}
-                                                className={sortColumn === 'tokensEarned' ? 'text-primary' : ''}
-                                            />
-                                        </button>
-                                    </th>
-                                    <th className="px-6 py-4 text-left">
-                                        <span className="font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                                            Actions
-                                        </span>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sortedUsers.map((user) => (
-                                    <UserTableRow
-                                        key={user.id}
-                                        user={user}
-                                        onViewProfile={handleViewProfile}
-                                        onManageUser={handleManageUser}
-                                    />
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {sortedUsers.length === 0 && (
-                        <div className="py-12 text-center">
-                            <Icon name="UserGroupIcon" size={48} className="mx-auto text-muted-foreground" />
-                            <p className="mt-4 font-caption text-sm text-muted-foreground">
-                                No users found matching your filters
-                            </p>
+                {activeAdminTab === 'overview' && (
+                    <>
+                        <div className="mb-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                            {statsData.map((stat) => (
+                                <StatCard key={stat.title} {...stat} />
+                            ))}
                         </div>
-                    )}
-                </div>
+
+                        <div id="analytics" className="mb-8 grid gap-6 lg:grid-cols-3">
+                            <div className="lg:col-span-2">
+                                <AnalyticsChart data={chartData} />
+                            </div>
+                            <div id="tokens" className="space-y-6">
+                                <TokenEconomyWidget metrics={tokenMetrics} />
+                            </div>
+                        </div>
+
+                        <div className="mb-8">
+                            <PopularCourses courses={popularCourses} />
+                        </div>
+                    </>
+                )}
+
+                {activeAdminTab === 'users' && (
+                    <>
+                        {/* Pending Submissions Section - Removed Blockchain Integration */}
+                        {/* <PendingSubmissionsSection ... /> */}
+
+                        <div id="users" className="rounded-xl bg-card p-6">
+                            <div className="mb-6">
+                                <h2 className="font-heading text-2xl font-bold text-foreground">User Management</h2>
+                                <p className="mt-1 font-caption text-sm text-muted-foreground">
+                                    View and manage all registered users on the platform
+                                </p>
+                            </div>
+
+                            <div className="mb-6">
+                                <FilterControls
+                                    searchQuery={searchQuery}
+                                    onSearchChange={setSearchQuery}
+                                    selectedCategory={selectedCategory}
+                                    onCategoryChange={setSelectedCategory}
+                                    selectedStatus={selectedStatus}
+                                    onStatusChange={setSelectedStatus}
+                                    dateRange={dateRange}
+                                    onDateRangeChange={setDateRange}
+                                />
+                            </div>
+
+                            <div className="overflow-x-auto scrollbar-custom">
+                                <table className="w-full min-w-[800px]">
+                                    <thead>
+                                        <tr className="border-b border-border">
+                                            <th className="px-6 py-4 text-left">
+                                                <button
+                                                    onClick={() => handleSort('name')}
+                                                    className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
+                                                >
+                                                    User
+                                                    <Icon
+                                                        name={sortColumn === 'name' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
+                                                        size={14}
+                                                        className={sortColumn === 'name' ? 'text-primary' : ''}
+                                                    />
+                                                </button>
+                                            </th>
+                                            <th className="px-6 py-4 text-left">
+                                                <button
+                                                    onClick={() => handleSort('enrollmentDate')}
+                                                    className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
+                                                >
+                                                    Enrollment
+                                                    <Icon
+                                                        name={sortColumn === 'enrollmentDate' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
+                                                        size={14}
+                                                        className={sortColumn === 'enrollmentDate' ? 'text-primary' : ''}
+                                                    />
+                                                </button>
+                                            </th>
+                                            <th className="px-6 py-4 text-left">
+                                                <button
+                                                    onClick={() => handleSort('status')}
+                                                    className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
+                                                >
+                                                    Status
+                                                    <Icon
+                                                        name={sortColumn === 'status' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
+                                                        size={14}
+                                                        className={sortColumn === 'status' ? 'text-primary' : ''}
+                                                    />
+                                                </button>
+                                            </th>
+                                            <th className="px-6 py-4 text-left">
+                                                <button
+                                                    onClick={() => handleSort('progress')}
+                                                    className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
+                                                >
+                                                    Progress
+                                                    <Icon
+                                                        name={sortColumn === 'progress' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
+                                                        size={14}
+                                                        className={sortColumn === 'progress' ? 'text-primary' : ''}
+                                                    />
+                                                </button>
+                                            </th>
+                                            <th className="px-6 py-4 text-left">
+                                                <button
+                                                    onClick={() => handleSort('tokensEarned')}
+                                                    className="flex items-center gap-2 font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground transition-smooth hover:text-foreground focus:outline-none"
+                                                >
+                                                    Tokens
+                                                    <Icon
+                                                        name={sortColumn === 'tokensEarned' && sortDirection === 'desc' ? 'ChevronDownIcon' : 'ChevronUpIcon'}
+                                                        size={14}
+                                                        className={sortColumn === 'tokensEarned' ? 'text-primary' : ''}
+                                                    />
+                                                </button>
+                                            </th>
+                                            <th className="px-6 py-4 text-left">
+                                                <span className="font-caption text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                                                    Actions
+                                                </span>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sortedUsers.map((user) => (
+                                            <UserTableRow
+                                                key={user.id}
+                                                user={user}
+                                                onViewProfile={handleViewProfile}
+                                                onManageUser={handleManageUser}
+                                            />
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {sortedUsers.length === 0 && (
+                                <div className="py-12 text-center">
+                                    <Icon name="UserGroupIcon" size={48} className="mx-auto text-muted-foreground" />
+                                    <p className="mt-4 font-caption text-sm text-muted-foreground">
+                                        No users found matching your filters
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
             </div>
 
             {showToast && (

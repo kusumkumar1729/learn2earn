@@ -3,12 +3,18 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import Icon from '@/components/ui/AppIcon';
 
 const DashboardInteractive = () => {
     const router = useRouter();
     const { user, loading, signOut } = useAuth();
+
+    // Mock data for dashboard stats
+    const coursesCompleted = 2; // Example static value
+    const tokenBalance = 1250; // Example static value
+    const achievementCount = 5; // Example static value
 
     // Redirect to landing if not authenticated
     useEffect(() => {
@@ -58,9 +64,11 @@ const DashboardInteractive = () => {
                         <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
                             {/* Avatar */}
                             {photoURL ? (
-                                <img
+                                <Image
                                     src={photoURL}
                                     alt={displayName}
+                                    width={96}
+                                    height={96}
                                     className="h-24 w-24 rounded-2xl object-cover ring-4 ring-primary/20 shadow-glow-md"
                                 />
                             ) : (
@@ -212,15 +220,21 @@ const DashboardInteractive = () => {
                     </h2>
                     <div className="grid gap-6 sm:grid-cols-3">
                         <div className="text-center">
-                            <div className="text-4xl font-bold text-primary">0</div>
+                            <div className="text-4xl font-bold text-primary">
+                                {coursesCompleted}
+                            </div>
                             <div className="mt-1 font-caption text-sm text-muted-foreground">Courses Completed</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-4xl font-bold text-secondary">0</div>
+                            <div className="text-4xl font-bold text-secondary">
+                                {tokenBalance.toLocaleString()}
+                            </div>
                             <div className="mt-1 font-caption text-sm text-muted-foreground">Tokens Earned</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-4xl font-bold text-accent">0</div>
+                            <div className="text-4xl font-bold text-accent">
+                                {achievementCount}
+                            </div>
                             <div className="mt-1 font-caption text-sm text-muted-foreground">Achievements</div>
                         </div>
                     </div>

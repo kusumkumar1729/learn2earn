@@ -23,10 +23,10 @@ const DynamicNavbar = () => {
         if (isAdmin) {
             return [
                 { label: 'Dashboard', href: '/admindashboard', icon: 'HomeIcon' },
-                { label: 'Manage Users', href: '/admindashboard', icon: 'UsersIcon' },
-                { label: 'Assign Tokens', href: '/admindashboard', icon: 'CurrencyDollarIcon' },
-                { label: 'Analytics', href: '/admindashboard', icon: 'ChartBarIcon' },
-                { label: 'Settings', href: '/admindashboard', icon: 'Cog6ToothIcon' },
+                { label: 'Submissions', href: '/admindashboard#submissions', icon: 'DocumentCheckIcon' },
+                { label: 'Users', href: '/admindashboard#users', icon: 'UsersIcon' },
+                { label: 'Tokens', href: '/admindashboard#tokens', icon: 'CurrencyDollarIcon' },
+                { label: 'Analytics', href: '/admindashboard#analytics', icon: 'ChartBarIcon' },
             ];
         }
 

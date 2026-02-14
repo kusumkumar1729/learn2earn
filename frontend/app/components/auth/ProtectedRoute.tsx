@@ -22,22 +22,17 @@ const ProtectedRoute = ({
     useEffect(() => {
         if (loading) return;
 
-        // Strict role-based routing
+        // Allow dual-dashboard access - admin can access both dashboards
+        // Only redirect unauthenticated users
         if (requiredRole === 'admin') {
-            // Admin route - block students and unauthenticated users
+            // Admin route - only block unauthenticated users
             if (!isAdmin) {
                 router.replace(redirectTo || '/admin-login');
-            } else if (isStudent) {
-                // If somehow both admin and student, prioritize redirecting to admin
-                router.replace('/admindashboard');
             }
         } else if (requiredRole === 'student') {
-            // Student route - block admins
-            if (isAdmin) {
-                // Redirect admin to admin dashboard
-                router.replace('/admindashboard');
-            } else if (!user || !isEmailVerified) {
-                // Not authenticated as student
+            // Student route - allow admin to access student pages too for testing/management
+            // Only redirect if completely unauthenticated
+            if (!user && !isAdmin) {
                 router.replace(redirectTo || '/');
             }
         }
@@ -70,20 +65,11 @@ const ProtectedRoute = ({
         );
     }
 
-    // Block admin from student routes
-    if (requiredRole === 'student' && isAdmin) {
-        return (
-            <div className="flex min-h-screen items-center justify-center bg-background">
-                <div className="text-center">
-                    <Icon name="ExclamationTriangleIcon" size={48} className="mx-auto mb-4 text-warning" />
-                    <h2 className="text-xl font-bold text-foreground mb-2">Wrong Dashboard</h2>
-                    <p className="text-muted-foreground">Redirecting to admin dashboard...</p>
-                </div>
-            </div>
-        );
-    }
+    // Allow admin to access student routes - no blocking
+    // Admin can view student dashboard for testing and management purposes
 
-    if (requiredRole === 'student' && (!user || !isEmailVerified)) {
+    // For student routes, only block if completely unauthenticated (not admin, not student)
+    if (requiredRole === 'student' && !user && !isAdmin) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background">
                 <div className="text-center">
