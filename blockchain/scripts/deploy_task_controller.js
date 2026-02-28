@@ -6,11 +6,11 @@ async function main() {
     const [deployer] = await hre.ethers.getSigners();
     console.log("Deploying TaskController with account:", deployer.address);
 
-    // Load existing addresses
-    const addressesPath = path.join(__dirname, "../../frontend/app/lib/blockchain/addresses.json");
+    // Load existing addresses from blockchain dir
+    const blockchainAddressesPath = path.join(__dirname, "../addresses.json");
     let addresses = {};
-    if (fs.existsSync(addressesPath)) {
-        addresses = JSON.parse(fs.readFileSync(addressesPath, 'utf8'));
+    if (fs.existsSync(blockchainAddressesPath)) {
+        addresses = JSON.parse(fs.readFileSync(blockchainAddressesPath, 'utf8'));
     }
 
     const eduTokenAddress = addresses.EDUToken;
@@ -29,9 +29,15 @@ async function main() {
 
     console.log("TaskController deployed to:", taskControllerAddress);
 
-    // Update addresses.json
+    // Update addresses.json in blockchain dir
     addresses.TaskController = taskControllerAddress;
-    fs.writeFileSync(addressesPath, JSON.stringify(addresses, null, 2));
+    fs.writeFileSync(blockchainAddressesPath, JSON.stringify(addresses, null, 2));
+
+    // Update addresses.ts in frontend dir
+    const frontendAddressPath = path.join(__dirname, "../../frontend/app/lib/blockchain/addresses.ts");
+    const tsContent = `export const blockchainAddresses = ${JSON.stringify(addresses, null, 2)} as const;`;
+    fs.writeFileSync(frontendAddressPath, tsContent);
+    console.log("✅ Addresses synced to Frontend (addresses.ts)");
 
     // Approve allowance for automated transfers
     const EDUToken = await hre.ethers.getContractFactory("EDUToken");

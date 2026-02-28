@@ -7,7 +7,8 @@ const EXPECTED_ADDRESSES = {
     EDUToken: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
     CertificateNFT: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
     CourseMarketplace: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-    HackathonPool: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
+    HackathonPool: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    TaskController: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
 };
 
 const STUDENT_ADDRESS = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"; // Account #1
@@ -24,8 +25,8 @@ async function main() {
     const nonce = await hre.ethers.provider.getTransactionCount(deployer.address);
     console.log("Current Nonce:", nonce);
 
-    let eduTokenAddress, certificateNFTAddress, courseMarketplaceAddress, hackathonPoolAddress;
-    let eduToken, certificateNFT, courseMarketplace, hackathonPool;
+    let eduTokenAddress, certificateNFTAddress, courseMarketplaceAddress, hackathonPoolAddress, taskControllerAddress;
+    let eduToken, certificateNFT, courseMarketplace, hackathonPool, taskController;
 
     // Check if we are in a 'dirty' state (Node not restarted)
     if (nonce > 0) {
@@ -33,17 +34,47 @@ async function main() {
 
         const code = await hre.ethers.provider.getCode(EXPECTED_ADDRESSES.EDUToken);
         if (code !== "0x") {
-            console.log("✅ Contracts found at expected addresses. Skipping deployment.");
+            console.log("✅ Base contracts found at expected addresses.");
             eduTokenAddress = EXPECTED_ADDRESSES.EDUToken;
             certificateNFTAddress = EXPECTED_ADDRESSES.CertificateNFT;
             courseMarketplaceAddress = EXPECTED_ADDRESSES.CourseMarketplace;
             hackathonPoolAddress = EXPECTED_ADDRESSES.HackathonPool;
 
-            // Attach to existing
+            // Attach to existing base contracts
             eduToken = await hre.ethers.getContractAt("EDUToken", eduTokenAddress);
             certificateNFT = await hre.ethers.getContractAt("CertificateNFT", certificateNFTAddress);
             courseMarketplace = await hre.ethers.getContractAt("CourseMarketplace", courseMarketplaceAddress);
             hackathonPool = await hre.ethers.getContractAt("HackathonPool", hackathonPoolAddress);
+
+            // TaskController may be at expected OR saved address — check both
+            const blockchainAddressesPath = path.join(__dirname, "..", "addresses.json");
+            let savedTaskControllerAddr = null;
+            if (fs.existsSync(blockchainAddressesPath)) {
+                const saved = JSON.parse(fs.readFileSync(blockchainAddressesPath, 'utf8'));
+                savedTaskControllerAddr = saved.TaskController;
+            }
+
+            // Try saved address first, then expected address
+            const candidateAddrs = [savedTaskControllerAddr, EXPECTED_ADDRESSES.TaskController].filter(Boolean);
+            let found = false;
+            for (const addr of candidateAddrs) {
+                const tcCode = await hre.ethers.provider.getCode(addr);
+                if (tcCode !== "0x") {
+                    taskControllerAddress = addr;
+                    taskController = await hre.ethers.getContractAt("TaskController", taskControllerAddress);
+                    console.log("✅ TaskController found at:", taskControllerAddress);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                console.log("⚠️  TaskController not found. Deploying fresh...");
+                const TaskController = await hre.ethers.getContractFactory("TaskController");
+                taskController = await TaskController.deploy(eduTokenAddress);
+                await taskController.waitForDeployment();
+                taskControllerAddress = await taskController.getAddress();
+                console.log("   TaskController deployed to:", taskControllerAddress);
+            }
         } else {
             console.error("\n❌ CRITICAL ERROR: Nonce is > 0 but contracts are missing.");
             console.error("   This results in changed contract addresses.");
@@ -86,14 +117,66 @@ async function main() {
         hackathonPoolAddress = await hackathonPool.getAddress();
         console.log("   Deployed to:", hackathonPoolAddress);
 
+        // ─── 5. Deploy Task Controller ────────────────────────
+        console.log("\n5. Deploying TaskController...");
+        const TaskController = await hre.ethers.getContractFactory("TaskController");
+        taskController = await TaskController.deploy(eduTokenAddress);
+        await taskController.waitForDeployment();
+        taskControllerAddress = await taskController.getAddress();
+        console.log("   Deployed to:", taskControllerAddress);
+
         // Verify Address Consistency
         if (eduTokenAddress !== EXPECTED_ADDRESSES.EDUToken) {
             console.warn("⚠️  WARNING: Deployment addresses differ from expected standards!");
         }
     }
 
-    // ─── 5. Seed Data (Idempotent) ──────────────────────
-    console.log("\n5. Verifying/Seeding Courses...");
+    // ─── 6. Approve TaskController Allowance ────────────
+    console.log("\n6. Approving TaskController EDU allowance...");
+    const currentAllowance = await eduToken.allowance(deployer.address, taskControllerAddress);
+    const requiredAllowance = hre.ethers.parseEther("1000000"); // 1M EDU
+    if (currentAllowance < requiredAllowance) {
+        const approveTx = await eduToken.approve(taskControllerAddress, requiredAllowance);
+        await approveTx.wait();
+        console.log("   ✅ TaskController approved for 1M EDU");
+    } else {
+        console.log("   Allowance already sufficient.");
+    }
+
+    // ─── 7. Seed Default Tasks (Idempotent) ─────────────
+    console.log("\n7. Verifying/Seeding Default Tasks...");
+    const nextTaskId = await taskController.nextTaskId();
+    if (Number(nextTaskId) <= 1) {
+        const defaultTasks = [
+            { title: "Attendance", condition: "Must have > 90% attendance", reward: "50" },
+            { title: "Assignments", condition: "All assignments submitted on time", reward: "25" },
+            { title: "CGPA Milestones", condition: "CGPA > 8.0", reward: "200" },
+            { title: "Semester Completion", condition: "Pass in all subjects", reward: "100" },
+            { title: "Record Submissions", condition: "Signed/Approved Record", reward: "30" },
+            { title: "Course Completions", condition: "Valid Course Certificate", reward: "75" },
+            { title: "Certifications", condition: "Industry Recognized Certification", reward: "150" },
+            { title: "Technical Activities", condition: "Participation Certificate", reward: "100" },
+            { title: "Cultural Activities", condition: "Participation Proof", reward: "50" },
+            { title: "Extracurricular", condition: "Activity Log / Certificate", reward: "40" },
+            { title: "NFT Certificates", condition: "NFT Metadata Linked", reward: "250" },
+            { title: "Monthly Attendance", condition: "Instructor Code Verification", reward: "50" },
+        ];
+        for (const task of defaultTasks) {
+            const tx = await taskController.createTask(
+                task.title, task.condition,
+                hre.ethers.parseEther(task.reward),
+                0, // INSTANT verification
+                0  // no minTokenBalance
+            );
+            await tx.wait();
+            console.log(`   Created: ${task.title} (${task.reward} EDU)`);
+        }
+    } else {
+        console.log("   Tasks already seeded.");
+    }
+
+    // ─── 8. Seed Data (Idempotent) ──────────────────────
+    console.log("\n8. Verifying/Seeding Courses...");
     const courses = [
         { name: "Professional Resume Review", price: "75", spots: 0 },
         { name: "T&P Training Program", price: "350", spots: 50 },
@@ -124,7 +207,7 @@ async function main() {
         console.log("   Courses already seeded.");
     }
 
-    console.log("\n6. Verifying/Seeding Hackathons...");
+    console.log("\n8. Verifying/Seeding Hackathons...");
     const hackathonList = [
         { name: "Blockchain Innovation Challenge", entryFee: "200", maxParticipants: 300 },
         { name: "AI/ML Hackathon 2026", entryFee: "150", maxParticipants: 400 },
@@ -149,8 +232,8 @@ async function main() {
         console.log("   Hackathons already seeded.");
     }
 
-    // ─── 6. Fund Student ────────────────────────────────
-    console.log("\n7. Managing Student Wallet Funds...");
+    // ─── 9. Fund Student ────────────────────────────────
+    console.log("\n9. Managing Student Wallet Funds...");
     const studentBalance = await eduToken.balanceOf(STUDENT_ADDRESS);
     const minBalance = hre.ethers.parseEther("500");
     const targetBalance = hre.ethers.parseEther("1000");
@@ -165,12 +248,13 @@ async function main() {
         console.log(`   Student has sufficient funds: ${hre.ethers.formatEther(studentBalance)} EDU`);
     }
 
-    // ─── 7. Save Addresses ──────────────────────────────
+    // ─── 10. Save Addresses ─────────────────────────────
     const addresses = {
         EDUToken: eduTokenAddress,
         CertificateNFT: certificateNFTAddress,
         CourseMarketplace: courseMarketplaceAddress,
         HackathonPool: hackathonPoolAddress,
+        TaskController: taskControllerAddress,
         deployer: deployer.address,
         network: hre.network.name,
         chainId: (await hre.ethers.provider.getNetwork()).chainId.toString(),
@@ -181,21 +265,22 @@ async function main() {
     const blockchainAddressPath = path.join(__dirname, "..", "addresses.json");
     fs.writeFileSync(blockchainAddressPath, JSON.stringify(addresses, null, 2));
 
-    // Save to frontend dir
-    const frontendAddressPath = path.join(__dirname, "..", "..", "frontend", "app", "lib", "blockchain", "addresses.json");
+    // Save to frontend dir as .ts to avoid Turbopack HMR issues with .json
+    const frontendAddressPath = path.join(__dirname, "..", "..", "frontend", "app", "lib", "blockchain", "addresses.ts");
     const frontendDir = path.dirname(frontendAddressPath);
     if (!fs.existsSync(frontendDir)) {
         fs.mkdirSync(frontendDir, { recursive: true });
     }
-    fs.writeFileSync(frontendAddressPath, JSON.stringify(addresses, null, 2));
-    console.log("\n✅ Addresses synced to Frontend");
+    const tsContent = `export const blockchainAddresses = ${JSON.stringify(addresses, null, 2)} as const;`;
+    fs.writeFileSync(frontendAddressPath, tsContent);
+    console.log("\n✅ Addresses synced to Frontend (addresses.ts)");
 
     // ─── 8. Copy ABIs ───────────────────────────────────
     const abiDir = path.join(__dirname, "..", "..", "frontend", "app", "lib", "blockchain", "abis");
     if (!fs.existsSync(abiDir)) {
         fs.mkdirSync(abiDir, { recursive: true });
     }
-    const contractNames = ["EDUToken", "CertificateNFT", "CourseMarketplace", "HackathonPool"];
+    const contractNames = ["EDUToken", "CertificateNFT", "CourseMarketplace", "HackathonPool", "TaskController"];
     for (const name of contractNames) {
         const artifact = require(`../artifacts/contracts/${name}.sol/${name}.json`);
         fs.writeFileSync(path.join(abiDir, `${name}.json`), JSON.stringify({ abi: artifact.abi }, null, 2));

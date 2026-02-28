@@ -7,7 +7,7 @@ async function main() {
     console.log("Seeding tasks with account:", deployer.address);
 
     // Load addresses
-    const addressesPath = path.join(__dirname, "../../frontend/app/lib/blockchain/addresses.json");
+    const addressesPath = path.join(__dirname, "../addresses.json");
     if (!fs.existsSync(addressesPath)) {
         console.error("Addresses file not found!");
         process.exit(1);
